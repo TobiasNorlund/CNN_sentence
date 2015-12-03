@@ -36,7 +36,7 @@ def Iden(x):
        
 def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
                    embedding, # Embedding object
-                   img_h, # Max words allowed in doc
+                   longest_doc, # Max words allowed in doc
                    filter_hs=[3,4,5],
                    hidden_units=[100,2], 
                    dropout_rate=[0.5],
@@ -58,7 +58,7 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
     lr_decay = adadelta decay parameter
     """    
     rng = np.random.RandomState(3435)
-    #img_h = len(datasets[0][0])-1
+    img_h = longest_doc + (max(filter_hs) - 1)*2
     img_w = embedding.d
     filter_w = img_w    
     feature_maps = hidden_units[0]
@@ -81,7 +81,6 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
     #zero_vec_tensor = T.vector()
     #zero_vec = np.zeros(img_w)
     #set_zero = theano.function([zero_vec_tensor], updates=[(Words, T.set_subtensor(Words[0,:], zero_vec_tensor))])
-
 
     layer0_input = embedding.get_embeddings_expr().reshape((batch_size,1,img_h,embedding.d))
 
@@ -116,13 +115,13 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
     np.random.seed(3435)
     if len(datasets[0]) % batch_size > 0:
         extra_data_num = batch_size - len(datasets[0]) % batch_size
-        train_set = shuffle(datasets[0])
-        extra_data = train_set[:extra_data_num]
-        new_data=np.append(datasets[0],extra_data,axis=0)
+        shuffle(datasets[0])
+        extra_data = datasets[0][:extra_data_num]
+        new_data=datasets[0] + extra_data
     else:
         new_data = datasets[0]
-    new_data = shuffle(new_data)
-    n_batches = new_data.shape[0]/batch_size
+    shuffle(new_data)
+    n_batches = len(new_data)/batch_size
     n_train_batches = int(np.round(n_batches*0.9))
 
     #divide train set into train/val sets 
@@ -144,7 +143,7 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
 #             givens={
 #                x: train_set_x[index * batch_size: (index + 1) * batch_size],
 #                y: train_set_y[index * batch_size: (index + 1) * batch_size]})
-    train_model = theano.function([y] + embedding.get_variable_vars(), cost, updates=grad_updates )
+    train_model = theano.function([y] + embedding.get_variable_vars(), [cost, classifier.errors(y)], updates=grad_updates )
 #          givens={
 #            x: train_set_x[index*batch_size:(index+1)*batch_size],
 #            y: train_set_y[index*batch_size:(index+1)*batch_size]})
@@ -188,10 +187,10 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
     def exec_model(i, model):
         # Go fetch all words in all batch documents and pad to img_h
         batch = train_set[minibatch_index*batch_size : (minibatch_index+1)*batch_size]
-        words = get_padded_words(batch, img_h, filter_h)
+        words = get_padded_words(batch, longest_doc, max(filter_hs))
         y_vals = [lbl for doc,lbl in batch]
 
-        return train_model(y_vals, *embedding.get_variables(words))
+        return model(y_vals, *embedding.get_variables(words))
 
     while (epoch < n_epochs):        
         epoch = epoch + 1
@@ -201,8 +200,11 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
         # - the remaining batches are considered validation set
 
         # Backpropagate training set errors
-        batch_iter = shuffle(range(n_train_batches)) if shuffle_batch else xrange(n_train_batches)
-        [exec_model(minibatch_index, train_model) for minibatch_index in batch_iter]
+
+        batch_iter = range(n_train_batches)
+        if shuffle_batch: shuffle(batch_iter)
+        train_losses = [exec_model(minibatch_index, train_model)[1] for minibatch_index in batch_iter]
+        train_perf = 1 - np.mean(train_losses)
         #for minibatch_index in batch_iter:
 
         #    # Go fetch all words in all batch documents and pad to img_h
@@ -214,11 +216,11 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
         #    #set_zero(zero_vec)
 
         # Forward propagate to get training set accuracy
-        train_losses = [exec_model(i,test_model) for i in xrange(n_train_batches)]
-        train_perf = 1 - np.mean(train_losses)
+        #train_losses = [exec_model(i,test_model) for i in xrange(n_train_batches)]
+        #train_perf = 1 - np.mean(train_losses)
 
         # Forward propagate to get validation set accuracy
-        val_losses = [exec_model(i, val_model) for i in xrange(n_val_batches)]
+        val_losses = [exec_model(i, val_model) for i in range(n_train_batches,n_batches)]
         val_perf = 1- np.mean(val_losses)
         print('epoch %i, train perf %f %%, val perf %f' % (epoch, train_perf * 100., val_perf*100.))
 
@@ -226,7 +228,7 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
         if val_perf >= best_val_perf:
             best_val_perf = val_perf
 
-            words = get_padded_words(test_set, img_h, filter_h)
+            words = get_padded_words(test_set, longest_doc, max(filter_hs))
             y_vals = [lbl for doc,lbl in test_set]
 
             test_loss = test_model_all(y_vals, *embedding.get_variables(words))
