@@ -127,8 +127,8 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
     #divide train set into train/val sets 
     test_set = datasets[1]
     #test_set_y = np.asarray(datasets[1][:,-1],"int32")
-    train_set = new_data[:n_train_batches*batch_size]
-    val_set = new_data[n_train_batches*batch_size:]
+    #train_set = new_data[:n_train_batches*batch_size]
+    #val_set = new_data[n_train_batches*batch_size:]
     #train_set_x, train_set_y = shared_dataset((train_set[:,:-1],train_set[:,-1]))
     #val_set_x, val_set_y = shared_dataset((val_set[:,:-1],val_set[:,-1]))
     n_val_batches = n_batches - n_train_batches
@@ -184,9 +184,9 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
         return words
 
     # helper function for executing a model
-    def exec_model(i, model):
+    def exec_model(minibatch_index, model):
         # Go fetch all words in all batch documents and pad to img_h
-        batch = train_set[minibatch_index*batch_size : (minibatch_index+1)*batch_size]
+        batch = new_data[minibatch_index*batch_size : (minibatch_index+1)*batch_size]
         words = get_padded_words(batch, longest_doc, max(filter_hs))
         y_vals = [lbl for doc,lbl in batch]
 
