@@ -34,7 +34,7 @@ def Iden(x):
     y = x
     return(y)
        
-def train_conv_net(datasets, # ( train list (doc,y) , validation list (doc,y) )
+def train_conv_net(datasets, # ( train list (doc,y) , validation list (doc,y), test list (doc,y) )
                    embedding, # Embedding object
                    longest_doc, # Max words allowed in doc
                    filter_hs=[3,4,5],
@@ -130,9 +130,12 @@ def train_conv_net(datasets, # ( train list (doc,y) , validation list (doc,y) )
     else:
         val_data=datasets[1]
 
+    test_data=datasets[2][:(len(datasets[2]) / batch_size)]
+
     shuffle(train_data)
     n_val_batches = len(val_data) / batch_size
     n_train_batches = len(train_data) / batch_size
+    n_test_batches = len(train_data) / batch_size
 
     #divide train set into train/val sets 
     #test_set = datasets[1]
@@ -234,15 +237,13 @@ def train_conv_net(datasets, # ( train list (doc,y) , validation list (doc,y) )
         print('epoch %i, train perf %f %%, val perf %f' % (epoch, train_perf * 100., val_perf*100.))
 
         # If we have a new peak validation performance, also forward propagate the test set and save its accuracy
-        #if val_perf >= best_val_perf:
-        #    best_val_perf = val_perf
-#
-#            words = get_padded_words(test_set, longest_doc, max(filter_hs))
-#            y_vals = [lbl for doc,lbl in test_set]
-#
-#            test_loss = test_model_all(y_vals, *embedding.get_variables(words))
-#            test_perf = 1- test_loss
-    return val_perf
+        if val_perf >= best_val_perf:
+            best_val_perf = val_perf
+
+            test_losses = [exec_model(i, val_model, test_data) for i in range(n_test_batches)]
+            test_perf = 1- np.mean(test_losses)
+
+    return test_perf
 
 def shared_dataset(data_xy, borrow=True):
         """ Function that loads the dataset into shared variables
