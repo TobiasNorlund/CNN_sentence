@@ -118,17 +118,21 @@ def train_conv_net(datasets, # ( train list (doc,y) , validation list (doc,y) )
         extra_data_num = batch_size - len(datasets[0]) % batch_size
         shuffle(datasets[0])
         extra_data = datasets[0][:extra_data_num]
-        datasets[0]=datasets[0] + extra_data
+        train_data=datasets[0] + extra_data
+    else:
+        train_data = datasets[0]
 
     if len(datasets[1]) % batch_size > 0:
         extra_data_num = batch_size - len(datasets[1]) % batch_size
-        shuffle(datasets[0])
+        shuffle(datasets[1])
         extra_data = datasets[1][:extra_data_num]
-        datasets[0]=datasets[0] + extra_data
+        val_data=datasets[1] + extra_data
+    else:
+        val_data=datasets[1]
 
-    shuffle(datasets[0])
-    n_batches = (len(datasets[0]) + len(datasets[1]))/batch_size
-    n_train_batches = len(datasets[0])
+    shuffle(train_data)
+    n_val_batches = len(val_data) / batch_size
+    n_train_batches = len(train_data) / batch_size
 
     #divide train set into train/val sets 
     #test_set = datasets[1]
@@ -137,7 +141,6 @@ def train_conv_net(datasets, # ( train list (doc,y) , validation list (doc,y) )
     #val_set = new_data[n_train_batches*batch_size:]
     #train_set_x, train_set_y = shared_dataset((train_set[:,:-1],train_set[:,-1]))
     #val_set_x, val_set_y = shared_dataset((val_set[:,:-1],val_set[:,-1]))
-    n_val_batches = len(datasets[1])
 
     val_model = theano.function([y] + embedding.get_variable_vars(), classifier.errors(y) )
 #         givens={
@@ -209,7 +212,7 @@ def train_conv_net(datasets, # ( train list (doc,y) , validation list (doc,y) )
 
         batch_iter = range(n_train_batches)
         if shuffle_batch: shuffle(batch_iter)
-        train_losses = [exec_model(minibatch_index, train_model, datasets[0])[1] for minibatch_index in batch_iter]
+        train_losses = [exec_model(minibatch_index, train_model, train_data)[1] for minibatch_index in batch_iter]
         train_perf = 1 - np.mean(train_losses)
         #for minibatch_index in batch_iter:
 
@@ -226,7 +229,7 @@ def train_conv_net(datasets, # ( train list (doc,y) , validation list (doc,y) )
         #train_perf = 1 - np.mean(train_losses)
 
         # Forward propagate to get validation set accuracy
-        val_losses = [exec_model(i, val_model, datasets[1]) for i in range(n_train_batches,n_batches)]
+        val_losses = [exec_model(i, val_model, val_data) for i in range(n_val_batches)]
         val_perf = 1- np.mean(val_losses)
         print('epoch %i, train perf %f %%, val perf %f' % (epoch, train_perf * 100., val_perf*100.))
 
