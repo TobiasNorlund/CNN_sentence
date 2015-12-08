@@ -130,12 +130,12 @@ def train_conv_net(datasets, # ( train list (doc,y) , validation list (doc,y), t
     else:
         val_data=datasets[1]
 
-    test_data=datasets[2][:(len(datasets[2]) / batch_size)]
+    test_data=datasets[2][:(len(datasets[2]) / batch_size)*batch_size]
 
     shuffle(train_data)
     n_val_batches = len(val_data) / batch_size
     n_train_batches = len(train_data) / batch_size
-    n_test_batches = len(train_data) / batch_size
+    n_test_batches = len(test_data) / batch_size
 
     #divide train set into train/val sets 
     #test_set = datasets[1]
