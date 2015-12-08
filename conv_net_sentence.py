@@ -34,7 +34,7 @@ def Iden(x):
     y = x
     return(y)
        
-def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
+def train_conv_net(datasets, # ( train list (doc,y) , validation list (doc,y) )
                    embedding, # Embedding object
                    longest_doc, # Max words allowed in doc
                    filter_hs=[3,4,5],
@@ -113,25 +113,31 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
     #shuffle dataset and assign to mini batches. if dataset size is not a multiple of mini batches, replicate 
     #extra data (at random)
     np.random.seed(3435)
+
     if len(datasets[0]) % batch_size > 0:
         extra_data_num = batch_size - len(datasets[0]) % batch_size
         shuffle(datasets[0])
         extra_data = datasets[0][:extra_data_num]
-        new_data=datasets[0] + extra_data
-    else:
-        new_data = datasets[0]
-    shuffle(new_data)
-    n_batches = len(new_data)/batch_size
-    n_train_batches = int(np.round(n_batches*0.9))
+        datasets[0]=datasets[0] + extra_data
+
+    if len(datasets[1]) % batch_size > 0:
+        extra_data_num = batch_size - len(datasets[1]) % batch_size
+        shuffle(datasets[0])
+        extra_data = datasets[1][:extra_data_num]
+        datasets[0]=datasets[0] + extra_data
+
+    shuffle(datasets[0])
+    n_batches = (len(datasets[0]) + len(datasets[1]))/batch_size
+    n_train_batches = len(datasets[0])
 
     #divide train set into train/val sets 
-    test_set = datasets[1]
+    #test_set = datasets[1]
     #test_set_y = np.asarray(datasets[1][:,-1],"int32")
     #train_set = new_data[:n_train_batches*batch_size]
     #val_set = new_data[n_train_batches*batch_size:]
     #train_set_x, train_set_y = shared_dataset((train_set[:,:-1],train_set[:,-1]))
     #val_set_x, val_set_y = shared_dataset((val_set[:,:-1],val_set[:,-1]))
-    n_val_batches = n_batches - n_train_batches
+    n_val_batches = len(datasets[1])
 
     val_model = theano.function([y] + embedding.get_variable_vars(), classifier.errors(y) )
 #         givens={
@@ -139,7 +145,7 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
 #            y: val_set_y[index * batch_size: (index + 1) * batch_size]})
             
     #compile theano functions to get train/val/test errors
-    test_model = theano.function([y] + embedding.get_variable_vars(), classifier.errors(y) )
+#    test_model = theano.function([y] + embedding.get_variable_vars(), classifier.errors(y) )
 #             givens={
 #                x: train_set_x[index * batch_size: (index + 1) * batch_size],
 #                y: train_set_y[index * batch_size: (index + 1) * batch_size]})
@@ -148,16 +154,16 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
 #            x: train_set_x[index*batch_size:(index+1)*batch_size],
 #            y: train_set_y[index*batch_size:(index+1)*batch_size]})
 
-    test_pred_layers = []
-    test_size = len(test_set)
-    test_layer0_input = embedding.get_embeddings_expr().reshape((test_size,1,img_h,embedding.d))
-    for conv_layer in conv_layers:
-        test_layer0_output = conv_layer.predict(test_layer0_input, test_size)
-        test_pred_layers.append(test_layer0_output.flatten(2))
-    test_layer1_input = T.concatenate(test_pred_layers, 1)
-    test_y_pred = classifier.predict(test_layer1_input)
-    test_error = T.mean(T.neq(test_y_pred, y))
-    test_model_all = theano.function([y]+embedding.get_variable_vars(), test_error)
+#    test_pred_layers = []
+#    test_size = len(test_set)
+#    test_layer0_input = embedding.get_embeddings_expr().reshape((test_size,1,img_h,embedding.d))
+#    for conv_layer in conv_layers:
+#        test_layer0_output = conv_layer.predict(test_layer0_input, test_size)
+#        test_pred_layers.append(test_layer0_output.flatten(2))
+#    test_layer1_input = T.concatenate(test_pred_layers, 1)
+#    test_y_pred = classifier.predict(test_layer1_input)
+#    test_error = T.mean(T.neq(test_y_pred, y))
+#    test_model_all = theano.function([y]+embedding.get_variable_vars(), test_error)
     
     #start training over mini-batches
     print '... training'
@@ -184,9 +190,9 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
         return words
 
     # helper function for executing a model
-    def exec_model(minibatch_index, model):
+    def exec_model(minibatch_index, model, dataset):
         # Go fetch all words in all batch documents and pad to img_h
-        batch = new_data[minibatch_index*batch_size : (minibatch_index+1)*batch_size]
+        batch = dataset[minibatch_index*batch_size : (minibatch_index+1)*batch_size]
         words = get_padded_words(batch, longest_doc, max(filter_hs))
         y_vals = [lbl for doc,lbl in batch]
 
@@ -203,7 +209,7 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
 
         batch_iter = range(n_train_batches)
         if shuffle_batch: shuffle(batch_iter)
-        train_losses = [exec_model(minibatch_index, train_model)[1] for minibatch_index in batch_iter]
+        train_losses = [exec_model(minibatch_index, train_model, datasets[0])[1] for minibatch_index in batch_iter]
         train_perf = 1 - np.mean(train_losses)
         #for minibatch_index in batch_iter:
 
@@ -220,20 +226,20 @@ def train_conv_net(datasets, # ( train list (doc,y) , test list (doc,y) )
         #train_perf = 1 - np.mean(train_losses)
 
         # Forward propagate to get validation set accuracy
-        val_losses = [exec_model(i, val_model) for i in range(n_train_batches,n_batches)]
+        val_losses = [exec_model(i, val_model, datasets[1]) for i in range(n_train_batches,n_batches)]
         val_perf = 1- np.mean(val_losses)
         print('epoch %i, train perf %f %%, val perf %f' % (epoch, train_perf * 100., val_perf*100.))
 
         # If we have a new peak validation performance, also forward propagate the test set and save its accuracy
-        if val_perf >= best_val_perf:
-            best_val_perf = val_perf
-
-            words = get_padded_words(test_set, longest_doc, max(filter_hs))
-            y_vals = [lbl for doc,lbl in test_set]
-
-            test_loss = test_model_all(y_vals, *embedding.get_variables(words))
-            test_perf = 1- test_loss
-    return test_perf
+        #if val_perf >= best_val_perf:
+        #    best_val_perf = val_perf
+#
+#            words = get_padded_words(test_set, longest_doc, max(filter_hs))
+#            y_vals = [lbl for doc,lbl in test_set]
+#
+#            test_loss = test_model_all(y_vals, *embedding.get_variables(words))
+#            test_perf = 1- test_loss
+    return val_perf
 
 def shared_dataset(data_xy, borrow=True):
         """ Function that loads the dataset into shared variables
