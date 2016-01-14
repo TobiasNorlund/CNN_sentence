@@ -286,13 +286,13 @@ def sgd_updates_adadelta(params,cost,rho=0.95,epsilon=1e-6,norm_lim=9,word_vec_n
         step =  -(T.sqrt(exp_su + epsilon) / T.sqrt(up_exp_sg + epsilon)) * gp
         updates[exp_su] = rho * exp_su + (1 - rho) * T.sqr(step)
         stepped_param = param + step
-        if (param.get_value(borrow=True).ndim == 2) and (param.name!='Words'):
+        if (param.get_value(borrow=True).ndim == 2) and (param.name!='Words' and param.name!='thetas'):
             col_norms = T.sqrt(T.sum(T.sqr(stepped_param), axis=0))
             desired_norms = T.clip(col_norms, 0, T.sqrt(norm_lim))
             scale = desired_norms / (1e-7 + col_norms)
             updates[param] = stepped_param * scale
         else:
-            updates[param] = stepped_param      
+            updates[param] = stepped_param
     return updates 
 
 def as_floatX(variable):
